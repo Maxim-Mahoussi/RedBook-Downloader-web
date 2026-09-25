@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.venv-win/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.coverage
+htmlcov/
+settings.json
+ExploreID.db
+ExploreData.db
+Download/
+temp/

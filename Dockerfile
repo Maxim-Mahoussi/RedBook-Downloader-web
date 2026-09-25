@@ -7,10 +7,12 @@ COPY source /source
 COPY static /static
 COPY LICENSE /LICENSE
 COPY main.py /main.py
+COPY web.py /web.py
+COPY serve.py /serve.py
 COPY requirements.txt /requirements.txt
 
 RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 8000
 
-CMD ["python", "main.py"]
+CMD ["python", "serve.py"]

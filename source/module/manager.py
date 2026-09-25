@@ -6,6 +6,7 @@ from shutil import rmtree
 from typing import Callable
 
 from httpx import AsyncClient
+from httpx import AsyncHTTPTransport
 from httpx import HTTPStatusError
 from httpx import RequestError
 from httpx import TimeoutException
@@ -39,10 +40,6 @@ class Manager:
         '作者昵称',
         '作者ID',
     )
-    NO_PROXY = {
-        "http://": None,
-        "https://": None,
-    }
     SEPARATE = "_"
     WEB_ID = r"(?:^|; )webId=[^;]+"
     WEB_SESSION = r"(?:^|; )web_session=[^;]+"
@@ -96,18 +93,16 @@ class Manager:
         self.proxy = self.__check_proxy(proxy)
         self.print_proxy_tip(_print, )
         self.request_client = AsyncClient(
-            headers=self.headers | {
+            headers=self.blank_headers | {
                 'referer': 'https://www.xiaohongshu.com/',
             },
             timeout=timeout,
-            verify=False,
             follow_redirects=True,
             **self.proxy,
         )
         self.download_client = AsyncClient(
             headers=self.blank_headers,
             timeout=timeout,
-            verify=False,
             follow_redirects=True,
             **self.proxy,
         )
@@ -174,7 +169,7 @@ class Manager:
         await self.request_client.aclose()
         await self.download_client.aclose()
         # self.__clean()
-        remove_empty_directories(self.root)
+        remove_empty_directories(self.temp)
         remove_empty_directories(self.folder)
 
     def __check_name_format(self, format_: str) -> str:
@@ -194,19 +189,46 @@ class Manager:
             url="https://www.baidu.com/",
     ) -> dict:
         if not proxy:
-            return {"proxies": self.NO_PROXY}
+            return {"proxy": None, "trust_env": False}
         if isinstance(proxy, str):
-            kwarg = {"proxy": proxy}
+            kwarg = {"proxy": proxy, "trust_env": False}
+            test_kwarg = kwarg
         elif isinstance(proxy, dict):
-            kwarg = {"proxies": proxy}
+            schemes = {
+                    "all": "all://",
+                    "all://": "all://",
+                    "http": "http://",
+                    "http://": "http://",
+                    "https": "https://",
+                    "https://": "https://",
+            }
+            proxy_values = [
+                    value
+                    for key, value in proxy.items()
+                    if key in schemes and isinstance(value, str) and value
+            ]
+            mounts = {
+                    schemes[key]: AsyncHTTPTransport(proxy=value)
+                    for key, value in proxy.items()
+                    if key in schemes and isinstance(value, str) and value
+            }
+            if not mounts:
+                self.proxy_tip = (
+                        self.message("proxy 参数 {0} 设置错误，程序将不会使用代理").format(proxy), WARNING,)
+                return {"proxy": None, "trust_env": False}
+            kwarg = {"mounts": mounts, "trust_env": False}
+            test_kwarg = {
+                    "proxy": proxy_values[0],
+                    "trust_env": False,
+            }
         else:
             self.proxy_tip = (
-                self.message("proxy 参数 {0} 设置错误，程序将不会使用代理").format(proxy), WARNING,)
-            return {"proxies": self.NO_PROXY}
+                    self.message("proxy 参数 {0} 设置错误，程序将不会使用代理").format(proxy), WARNING,)
+            return {"proxy": None, "trust_env": False}
         try:
             response = get(
                 url,
-                **kwarg, )
+                **test_kwarg, )
             response.raise_for_status()
             self.proxy_tip = (self.message("代理 {0} 测试成功").format(proxy),)
             return kwarg
@@ -220,7 +242,7 @@ class Manager:
             self.proxy_tip = (
                 self.message("代理 {0} 测试失败：{1}").format(
                     proxy, e), WARNING,)
-        return {"proxies": self.NO_PROXY}
+        return {"proxy": None, "trust_env": False}
 
     def print_proxy_tip(self, _print: bool = True, log=None, ) -> None:
         if _print and self.proxy_tip:

@@ -9,6 +9,8 @@ def file_switch(path: Path) -> None:
 
 
 def remove_empty_directories(path: Path) -> None:
+    if not path.is_dir():
+        return
     exclude = {
         "\\.",
         "\\_",
