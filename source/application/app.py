@@ -7,7 +7,7 @@ from contextlib import suppress
 from datetime import datetime
 from re import compile
 from typing import Callable
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
@@ -228,10 +228,24 @@ class XHS:
         urls = []
         for i in url.split():
             if u := self.SHORT.search(i):
-                i = await self.html.request_url(
+                resolved_url = await self.html.request_url(
                     u.group(),
-                    False,
+                    "url",
                     log,
+                )
+                candidates = [resolved_url]
+                redirect_path = parse_qs(
+                    urlparse(resolved_url).query,
+                ).get("redirectPath", [""])[0]
+                if redirect_path:
+                    candidates.append(redirect_path)
+                i = next(
+                    (
+                        candidate
+                        for candidate in candidates
+                        if self.SHARE.search(candidate) or self.LINK.search(candidate)
+                    ),
+                    "",
                 )
             if u := self.SHARE.search(i):
                 urls.append(u.group())

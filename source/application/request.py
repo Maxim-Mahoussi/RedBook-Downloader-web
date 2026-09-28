@@ -37,6 +37,11 @@ class Html:
                     response = await self.__request_url_head(url, headers, **kwargs, )
                     await sleep_time()
                     return str(response.url)
+                case "url":
+                    response = await self.__request_url_get(url, headers, **kwargs, )
+                    await sleep_time()
+                    response.raise_for_status()
+                    return str(response.url)
         except HTTPError as error:
             logging(
                 log,
