@@ -5,8 +5,10 @@ from unittest.mock import AsyncMock, patch
 from urllib.parse import quote
 
 from source.application.app import XHS
+from source.application.image import Image
 from source.application.request import Html
 from source.application.video import Video
+from source.expansion import Converter
 from source.expansion import Namespace
 
 
@@ -111,6 +113,50 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(Video.get_video_link(data), [
             "https://sns-video-bd.xhscdn.com/stream/legacy.mp4",
         ])
+
+
+class RedNoteDataTests(unittest.TestCase):
+    def test_converter_reads_rednote_note_schema(self):
+        data = {
+            "noteData": {
+                "data": {
+                    "noteData": {
+                        "noteId": "abc123",
+                        "title": "Test",
+                    },
+                },
+            },
+        }
+        self.assertEqual(
+            Converter._filter_object(data),
+            {"noteId": "abc123", "title": "Test"},
+        )
+
+    def test_converter_reads_legacy_note_schema(self):
+        data = {
+            "note": {
+                "noteDetailMap": [
+                    {"note": {"noteId": "abc123"}},
+                ],
+            },
+        }
+        self.assertEqual(
+            Converter._filter_object(data),
+            {"noteId": "abc123"},
+        )
+
+    def test_image_link_uses_rednote_file_id(self):
+        data = Namespace({
+            "imageList": [
+                {"fileId": "1040g008abc"},
+            ],
+        })
+        links, live = Image.get_image_link(data, "png")
+        self.assertEqual(
+            links,
+            ["https://ci.xiaohongshu.com/1040g008abc?imageView2/format/png"],
+        )
+        self.assertEqual(live, [None])
 
 
 if __name__ == "__main__":

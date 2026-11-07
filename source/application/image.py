@@ -11,8 +11,10 @@ class Image:
         live_link = cls.__get_live_link(images)
         token_list = [
             cls.__extract_image_token(
-                Namespace.object_extract(
-                    i, "urlDefault")) for i in images]
+                Namespace.object_extract(i, "urlDefault")
+                or Namespace.object_extract(i, "fileId")
+                or ""
+            ) for i in images]
         match format_:
             case "png":
                 return [Html.format_url(cls.__generate_png_link(i))
@@ -33,6 +35,8 @@ class Image:
 
     @staticmethod
     def __extract_image_token(url: str) -> str:
+        if "/" not in url:
+            return url
         return "/".join(url.split("/")[5:]).split("!")[0]
 
     @staticmethod

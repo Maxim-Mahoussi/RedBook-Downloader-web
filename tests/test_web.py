@@ -78,10 +78,56 @@ class WebHelperTests(unittest.TestCase):
             web.normalize_page_url("https://xhslink.com/a/abc123"),
             "https://xhslink.com/a/abc123",
         )
+        self.assertEqual(
+            web.normalize_page_url("https://xiaohongshu.com/explore/abc123"),
+            "https://www.xiaohongshu.com/explore/abc123",
+        )
+        self.assertEqual(
+            web.normalize_page_url("https://m.xiaohongshu.com/discovery/item/abc123"),
+            "https://www.xiaohongshu.com/discovery/item/abc123",
+        )
+        self.assertEqual(
+            web.normalize_page_url("https://www.xhslink.com/a/abc123"),
+            "https://xhslink.com/a/abc123",
+        )
+        self.assertEqual(
+            web.normalize_page_url("https://www.rednote.com/discovery/item/abc123"),
+            "https://www.rednote.com/discovery/item/abc123",
+        )
+        self.assertEqual(
+            web.normalize_page_url("https://m.rednote.com/explore/abc123"),
+            "https://www.rednote.com/explore/abc123",
+        )
+
+    def test_normalize_page_url_extracts_link_from_share_text(self):
+        text = (
+            "Regarde cette publication ! "
+            "https://xhslink.com/a/abc123，复制本条信息，打开【小红书】App查看精彩内容！"
+        )
+        self.assertEqual(
+            web.normalize_page_url(text),
+            "https://xhslink.com/a/abc123",
+        )
+        text_with_space = (
+            "Lien : https://www.xiaohongshu.com/explore/abc123"
+            "?xsec_token=test fin"
+        )
+        self.assertEqual(
+            web.normalize_page_url(text_with_space),
+            "https://www.xiaohongshu.com/explore/abc123?xsec_token=test",
+        )
+
+    def test_normalize_page_url_rejects_text_without_link(self):
+        with self.assertRaises(HTTPException):
+            web.normalize_page_url("bonjour, voici ma publication")
 
     def test_normalize_page_url_rejects_other_hosts(self):
         with self.assertRaises(HTTPException):
             web.normalize_page_url("https://example.com/video")
+        with self.assertRaises(HTTPException):
+            web.normalize_page_url("https://xiaohongshu.com.evil.example/explore/abc123")
+        with self.assertRaises(HTTPException):
+            web.normalize_page_url("https://www.xiaohongshu.com/user/profile/abc123")
 
     def test_media_url_allowlist(self):
         self.assertTrue(web.is_allowed_media_url(
@@ -122,6 +168,8 @@ class WebHelperTests(unittest.TestCase):
             health = client.get("/health")
             self.assertEqual(index.status_code, 200)
             self.assertIn("Téléchargeur RedNote", index.text)
+            self.assertIn('name="url" type="text"', index.text)
+            self.assertIn("texte de partage", index.text)
             self.assertEqual(health.status_code, 200)
             self.assertEqual(health.json(), {"status": "ok"})
 

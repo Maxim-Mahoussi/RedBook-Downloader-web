@@ -9,10 +9,17 @@ __all__ = ["Converter"]
 class Converter:
     INITIAL_STATE = "//script/text()"
     KEYS_LINK = (
-        "note",
-        "noteDetailMap",
-        "[-1]",
-        "note",
+        (
+            "note",
+            "noteDetailMap",
+            "[-1]",
+            "note",
+        ),
+        (
+            "noteData",
+            "data",
+            "noteData",
+        ),
     )
 
     def run(self, content: str) -> dict:
@@ -33,7 +40,11 @@ class Converter:
 
     @classmethod
     def _filter_object(cls, data: dict) -> dict:
-        return cls.deep_get(data, cls.KEYS_LINK) or {}
+        for keys in cls.KEYS_LINK:
+            result = cls.deep_get(data, keys)
+            if result:
+                return result
+        return {}
 
     @classmethod
     def deep_get(cls, data: dict, keys: list | tuple, default=None):

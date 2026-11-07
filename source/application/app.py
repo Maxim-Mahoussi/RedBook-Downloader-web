@@ -64,9 +64,9 @@ class XHS:
     VERSION_MAJOR = VERSION_MAJOR
     VERSION_MINOR = VERSION_MINOR
     VERSION_BETA = VERSION_BETA
-    LINK = compile(r"https?://www\.xiaohongshu\.com/explore/\S+")
-    SHARE = compile(r"https?://www\.xiaohongshu\.com/discovery/item/\S+")
-    SHORT = compile(r"https?://xhslink\.com/\S+")
+    LINK = compile(r"https?://(?:www\.)?(?:xiaohongshu|rednote)\.com/explore/\S+")
+    SHARE = compile(r"https?://(?:www\.)?(?:xiaohongshu|rednote)\.com/discovery/item/\S+")
+    SHORT = compile(r"https?://(?:www\.)?xhslink\.com/\S+")
     __INSTANCE = None
     CLEANER = Cleaner()
 

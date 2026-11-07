@@ -5,16 +5,15 @@ from html import escape
 from logging import getLogger
 from os import environ
 from pathlib import PurePosixPath
-from re import sub
+from re import IGNORECASE, compile, sub
 from secrets import compare_digest
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, urlunparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from httpx import AsyncClient, HTTPError, Response, Timeout
 
 from source import XHS
-from source.module import USERAGENT
 
 PAGE = """<!doctype html>
 <html lang="fr">
@@ -47,7 +46,8 @@ small, .hint { color: #b2b8c0; }
 {{ERROR}}
 <form method="post" action="/download/">
 <label for="url">Lien de la publication</label>
-<input id="url" name="url" type="url" required placeholder="https://www.xiaohongshu.com/explore/...">
+<input id="url" name="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" required placeholder="https://www.xiaohongshu.com/explore/...">
+<p class="hint">Collez le lien seul ou tout le texte de partage.</p>
 <label for="index">Numéro de l’image</label>
 <input id="index" name="index" type="number" min="1" value="1">
 <p class="hint">Pour une vidéo, laisse 1. Pour plusieurs images, choisis leur numéro.</p>
@@ -67,7 +67,11 @@ MAX_REQUEST_BODY_BYTES = 64 * 1024
 MAX_CONCURRENT_DOWNLOADS = max(1, int(environ.get("MAX_CONCURRENT_DOWNLOADS", "1")))
 APP_TOKEN = environ.get("APP_TOKEN", "")
 XHS_COOKIE = environ.get("XHS_COOKIE", "")
-XHS_USER_AGENT = environ.get("XHS_USER_AGENT", USERAGENT)
+MOBILE_USER_AGENT = (
+    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 "
+    "Chrome/120 Mobile Safari/537.36"
+)
+XHS_USER_AGENT = environ.get("XHS_USER_AGENT", MOBILE_USER_AGENT)
 XHS_PROXY = environ.get("XHS_PROXY") or None
 MEDIA_DOMAINS = ("xhscdn.com", "xiaohongshu.com")
 MEDIA_EXTENSIONS = {
@@ -80,6 +84,10 @@ MEDIA_EXTENSIONS = {
     "video/x-m4v": ".m4v",
 }
 DOWNLOAD_SLOTS = Semaphore(MAX_CONCURRENT_DOWNLOADS)
+URL_PATTERN = compile(
+    r"https?://[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+",
+    IGNORECASE,
+)
 logger = getLogger(__name__)
 
 
@@ -198,37 +206,42 @@ def check_token(value: str) -> None:
         raise HTTPException(status_code=401, detail="Code d’accès incorrect.")
 
 
+def extract_url(value: str) -> str:
+    match = URL_PATTERN.search(value)
+    if not match:
+        return value
+    return match.group().rstrip(".,;:!?)]}'\"，。；：！？、）】」』")
+
+
 def normalize_page_url(value: str) -> str:
     value = value.strip()
+    if not value or len(value) > 8192:
+        raise HTTPException(status_code=400, detail="Lien invalide.")
+    value = extract_url(value)
     if not value or len(value) > 2048:
         raise HTTPException(status_code=400, detail="Lien invalide.")
     try:
         parsed = urlparse(value)
+        host = (parsed.hostname or "").lower()
     except ValueError:
         raise HTTPException(status_code=400, detail="Lien invalide.")
-    host = (parsed.hostname or "").lower()
-    allowed = (
-            parsed.scheme in {"http", "https"}
-            and not parsed.username
-            and not parsed.password
-            and host == "www.xiaohongshu.com"
-            and (
-                parsed.path.startswith("/explore/")
-                or parsed.path.startswith("/discovery/item/")
-            )
-    ) or (
-            parsed.scheme in {"http", "https"}
-            and not parsed.username
-            and not parsed.password
-            and host == "xhslink.com"
-            and parsed.path != "/"
+    scheme_ok = parsed.scheme in {"http", "https"}
+    auth_ok = not parsed.username and not parsed.password
+    xiaohongshu_host = host == "xiaohongshu.com" or host.endswith(".xiaohongshu.com")
+    rednote_host = host == "rednote.com" or host.endswith(".rednote.com")
+    xhslink_host = host == "xhslink.com" or host.endswith(".xhslink.com")
+    if scheme_ok and auth_ok and (xiaohongshu_host or rednote_host) and (
+            parsed.path.startswith("/explore/")
+            or parsed.path.startswith("/discovery/item/")
+    ):
+        netloc = "www.rednote.com" if rednote_host else "www.xiaohongshu.com"
+        return urlunparse(parsed._replace(netloc=netloc))
+    if scheme_ok and auth_ok and xhslink_host and parsed.path != "/":
+        return urlunparse(parsed._replace(netloc="xhslink.com"))
+    raise HTTPException(
+        status_code=400,
+        detail="Utilise un lien www.xiaohongshu.com, rednote.com ou xhslink.com.",
     )
-    if not allowed:
-        raise HTTPException(
-            status_code=400,
-            detail="Utilise un lien www.xiaohongshu.com ou xhslink.com.",
-        )
-    return value
 
 
 def is_allowed_media_url(value: str) -> bool:
